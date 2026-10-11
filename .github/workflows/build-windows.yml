@@ -1,0 +1,35 @@
+name: Build Windows VR prototype
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OpenXR loader via vcpkg
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP/vcpkg"
+          & "$env:RUNNER_TEMP/vcpkg/bootstrap-vcpkg.bat" -disableMetrics
+          & "$env:RUNNER_TEMP/vcpkg/vcpkg.exe" install openxr-loader:x64-windows
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:RUNNER_TEMP/vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+      - name: Compile
+        run: cmake --build build --config Release --parallel
+      - name: Stage build output
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifact | Out-Null
+          Copy-Item build/Release/dinput8.dll artifact/
+          Copy-Item dist/fs25vr.ini artifact/
+          Copy-Item LICENSE artifact/
+          Copy-Item THIRD_PARTY_NOTICES.md artifact/
+          Compress-Archive -Path mod/FS25_VR/* -DestinationPath artifact/FS25_VR.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FS25-NativeVR-Windows-prototype
+          path: artifact/*
